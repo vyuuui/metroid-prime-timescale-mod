@@ -5,14 +5,11 @@
 #include "mp1/mpsdk/alloc.hh"
 
 bool dt_just_changed = false;
-static CGuiTextSupport* ingame_debug_text = nullptr;
 static float last_dt = kNormalDt;
-static LogToken delta_time_token = kInvalidToken;
 
 // Exposed mod cvars
 extern "C" {
-float game_timescale = 1.f;
-bool show_logs = false;
+float game_timescale = 0.5f;
 }
 
 extern "C" {
@@ -26,46 +23,25 @@ void update_dt_changed_flag(float dt) {
    last_dt = dt;
 }
 
-void cmfgame_hooks_release() {
-   if (ingame_debug_text != nullptr) {
-      ingame_debug_text->destroy();
-      free(ingame_debug_text);
-      ingame_debug_text = nullptr;
-   }
-   delta_time_token = kInvalidToken;
-}
+void cmfgame_hooks_release() {}
 
 // Don't free
 void cmfgame_hooks_suspend() {}
-
-static void ensure_logging_init() {
-   if (ingame_debug_text == nullptr) {
-      ingame_debug_text = CGuiTextSupport::create_debug_print(0.5f);
-   }
-   if (delta_time_token == kInvalidToken) {
-      delta_time_token = generate_debug_log_token();
-   }
-}
 
 // Exposed mod functions
 extern "C" {
 int hooked_cmfgame_onmessage(CMFGame* cmfgame, CArchitectureMessage* arch_message,
                              void* arch_queue) {
+   uint16_t* VI_clock = reinterpret_cast<uint16_t*>(0xcc00206c);
+   if (*VI_clock != 1) {
+      *VI_clock = 1;
+   }
    EArchMsgType message_type = arch_message->type;
    const float scaled_dt = kNormalDt * game_timescale;
-
-   // Create the debug printer
-   ensure_logging_init();
 
    if (message_type == EArchMsgType::TimerTick) {
       update_dt_changed_flag(scaled_dt);
       arch_message->get_param_val<float>() = scaled_dt;
-
-      if (show_logs) {
-         char scaled_dt_fmt[128];
-         sprintf(scaled_dt_fmt, "dt = %.4f, timescale = %.4f", scaled_dt, game_timescale);
-         log_on_token(delta_time_token, scaled_dt_fmt);
-      }
    } else if (message_type == EArchMsgType::UserInput) {
       arch_message->get_param_val<float>() = scaled_dt;
    }
@@ -78,20 +54,6 @@ int hooked_cmfgame_onmessage(CMFGame* cmfgame, CArchitectureMessage* arch_messag
    volatile int iowin_return_code = cmfgame->original_onmessage(arch_message, arch_queue);
    _restore_reg_ctx(saved_regs);
 
-   if (message_type == EArchMsgType::TimerTick) {
-      if (ingame_debug_text != nullptr && show_logs) {
-         ingame_debug_text->set_text(get_log_string());
-         ingame_debug_text->update(scaled_dt);
-      }
-   }
    return iowin_return_code;
-}
-
-void hooked_cmfgame_draw(CMFGame* cmfgame) {
-   cmfgame->original_draw();
-   if (ingame_debug_text != nullptr && show_logs) {
-      ingame_debug_text->prepare_for_render();
-      ingame_debug_text->render();
-   }
 }
 }
