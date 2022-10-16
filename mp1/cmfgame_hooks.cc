@@ -23,10 +23,21 @@ void update_dt_changed_flag(float dt) {
    last_dt = dt;
 }
 
-void cmfgame_hooks_release() {}
+void cmfgame_hooks_release() {
+   uint16_t* VI_clock = reinterpret_cast<uint16_t*>(0xcc00206c);
+   if (*VI_clock != 0) {
+      *VI_clock = 0;
+   }
+}
+
 
 // Don't free
-void cmfgame_hooks_suspend() {}
+void cmfgame_hooks_suspend() {
+   uint16_t* VI_clock = reinterpret_cast<uint16_t*>(0xcc00206c);
+   if (*VI_clock != 0) {
+      *VI_clock = 0;
+   }
+}
 
 // Exposed mod functions
 extern "C" {
